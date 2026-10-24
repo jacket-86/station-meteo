@@ -1,0 +1,112 @@
+
+cat > ~/station-meteo/index.html <<'EOF'
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07110d">
+<title>Station météo</title>
+<style>
+:root{color-scheme:dark;--bg:#07110d;--panel:#101d17;--line:#244633;--green:#69f0a1;--muted:#a8b9ae;--text:#f0f8f2;--yellow:#d8f28b}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#142b1e 0,#07110d 55%);color:var(--text);font:16px/1.45 sans-serif;min-height:100vh}
+main{max-width:1100px;margin:auto;padding:20px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:8px 0 18px}
+.brand{font-weight:bold;letter-spacing:.12em;color:var(--green)}
+.small{color:var(--muted);font-size:.88rem}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input,button{font:inherit;border-radius:10px;border:1px solid var(--line);padding:10px 12px}
+input{background:#0b1710;color:var(--text);min-width:180px}
+button{background:var(--green);color:#07110d;font-weight:bold}
+h1{font-size:2rem;margin:20px 0 2px}
+h2{font-size:1rem;color:var(--green);margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
+.card{background:linear-gradient(145deg,#122219,#0d1812);border:1px solid var(--line);border-radius:16px;padding:16px;min-width:0}
+.hero{grid-column:span 2;grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between;min-height:230px}
+.temp{font-size:4rem;font-weight:bold;line-height:1.1}
+.condition{color:var(--green);font-size:1.15rem;margin-top:8px}
+.metric{font-size:1.6rem;font-weight:bold}
+.forecast{grid-column:span 4}
+.hours{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
+.hour,.day{background:#0a150f;border-radius:12px;padding:10px 6px;text-align:center}
+.hour strong{display:block;font-size:1.05rem;margin:6px 0}
+.hour span{display:block;color:var(--muted);font-size:.8rem}
+.days{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.day strong{display:block}
+.range{color:var(--yellow);margin-top:5px}
+.status{margin:14px 0;color:var(--muted);font-size:.86rem}
+.error{color:#ffb4a8}
+.foot{margin:22px 0 6px;color:var(--muted);font-size:.78rem}
+@media(max-width:700px){main{padding:12px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.hero{grid-column:span 2;grid-row:auto;min-height:200px}.forecast{grid-column:span 2}.hours{grid-template-columns:repeat(4,minmax(0,1fr))}.days{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:12px}}
+@media(max-width:380px){.hours{grid-template-columns:repeat(2,minmax(0,1fr))}input{min-width:0;width:100%}form{width:100%}button{width:100%}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div><div class="brand">FIELD / WX-01</div><div class="small">TABLEAU DE BORD MÉTÉO</div></div>
+<form id="search"><input id="place" value="Ustaritz" aria-label="Ville" placeholder="Ville ou commune"><button type="submit">Afficher</button></form>
+</header>
+<div class="small" id="updated">Préparation du tableau de bord…</div>
+<h1 id="title">Station météo</h1><div class="small" id="subtitle">Prévisions locales</div>
+<div class="grid">
+<section class="card hero"><div><h2>CONDITIONS ACTUELLES</h2><div class="temp" id="temp">--°</div><div class="condition" id="desc">Chargement…</div></div><div class="small" id="feels">Ressenti : --</div></section>
+<section class="card"><h2>HUMIDITÉ</h2><div class="metric" id="humidity">--%</div><div class="small">Humidité relative</div></section>
+<section class="card"><h2>VENT</h2><div class="metric" id="wind">-- km/h</div><div class="small" id="winddir">Direction : --</div></section>
+<section class="card"><h2>PRESSION</h2><div class="metric" id="pressure">-- hPa</div><div class="small">Au niveau de la mer</div></section>
+<section class="card"><h2>PLUIE</h2><div class="metric" id="rain">--%</div><div class="small">Probabilité horaire</div></section>
+<section class="card forecast"><h2>PROCHAINES HEURES</h2><div class="hours" id="hours"></div></section>
+<section class="card forecast"><h2>PRÉVISIONS SUR 5 JOURS</h2><div class="days" id="days"></div></section>
+</div>
+<div class="status" id="status">Connexion aux données météo…</div>
+<div class="foot">Données : Open-Meteo. Prévisions modélisées, pas une mesure par un capteur chez toi. Actualisation toutes les 15 minutes.</div>
+</main>
+<script>
+function el(id){return document.getElementById(id)}
+var codes={0:"Ciel dégagé",1:"Principalement dégagé",2:"Partiellement nuageux",3:"Couvert",45:"Brouillard",48:"Brouillard givrant",51:"Bruine légère",53:"Bruine",55:"Bruine forte",56:"Bruine verglaçante",57:"Bruine verglaçante forte",61:"Pluie faible",63:"Pluie modérée",65:"Pluie forte",66:"Pluie verglaçante",67:"Pluie verglaçante forte",71:"Neige faible",73:"Neige modérée",75:"Neige forte",77:"Grains de neige",80:"Averses faibles",81:"Averses modérées",82:"Averses fortes",85:"Averses de neige faibles",86:"Averses de neige fortes",95:"Orage",96:"Orage et grêle",99:"Orage et forte grêle"};
+var dirs=["N","NE","E","SE","S","SO","O","NO"];
+function direction(d){return dirs[Math.round(d/45)%8]}
+function fmtTime(s){return new Date(s).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
+function fmtDay(s){return new Date(s+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"short",day:"numeric"})}
+function requestJSON(url,done,fail){
+var x=new XMLHttpRequest();x.open("GET",url,true);
+x.onreadystatechange=function(){if(x.readyState===4){if(x.status>=200&&x.status<300){try{done(JSON.parse(x.responseText))}catch(e){fail("Réponse météo illisible")}}else{fail("Service indisponible (HTTP "+x.status+")")}}};
+x.onerror=function(){fail("Connexion impossible. Vérifie le Wi-Fi.")};x.send()
+}
+function showError(msg){el("status").className="status error";el("status").textContent="Erreur : "+msg}
+function loadWeather(city){
+el("status").className="status";el("status").textContent="Recherche de la commune…";
+var geourl="https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(city)+"&count=1&language=fr&format=json";
+requestJSON(geourl,function(gj){
+if(!gj.results||!gj.results.length){showError("Commune introuvable. Essaie une ville voisine.");return}
+var p=gj.results[0];el("title").textContent=p.name;el("subtitle").textContent=[p.admin1,p.country].filter(Boolean).join(" · ");
+var url="https://api.open-meteo.com/v1/forecast?latitude="+p.latitude+"&longitude="+p.longitude+"&timezone=auto&forecast_days=5&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min";
+el("status").textContent="Récupération des prévisions…";
+requestJSON(url,function(d){
+var c=d.current,h=d.hourly,day=d.daily;
+el("temp").textContent=Math.round(c.temperature_2m)+"°";
+el("desc").textContent=codes[c.weather_code]||"Conditions météo";
+el("feels").textContent="Ressenti : "+Math.round(c.apparent_temperature)+"°";
+el("humidity").textContent=c.relative_humidity_2m+"%";
+el("wind").textContent=Math.round(c.wind_speed_10m)+" km/h";
+el("winddir").textContent="Direction : "+direction(c.wind_direction_10m);
+el("pressure").textContent=Math.round(c.pressure_msl)+" hPa";
+var idx=0;while(idx<h.time.length&&h.time[idx]<c.time){idx++}if(idx>=h.time.length)idx=0;
+el("rain").textContent=(h.precipitation_probability[idx]===null?0:h.precipitation_probability[idx])+"%";
+var hours="";for(var i=idx;i<Math.min(idx+8,h.time.length);i++){hours+='<div class="hour"><span>'+fmtTime(h.time[i])+'</span><strong>'+Math.round(h.temperature_2m[i])+'°</strong><span>'+(h.precipitation_probability[i]===null?0:h.precipitation_probability[i])+'% pluie</span></div>'}
+el("hours").innerHTML=hours;
+var days="";for(var j=0;j<day.time.length;j++){days+='<div class="day"><strong>'+fmtDay(day.time[j])+'</strong><div>'+(codes[day.weather_code[j]]||"Météo")+'</div><div class="range">'+Math.round(day.temperature_2m_max[j])+'° / '+Math.round(day.temperature_2m_min[j])+'°</div></div>'}
+el("days").innerHTML=days;
+el("updated").textContent="Mis à jour à "+fmtTime(c.time)+" · Heure locale";
+el("status").textContent="Données chargées avec succès."
+},showError)
+},showError)
+}
+el("search").onsubmit=function(e){e.preventDefault();loadWeather(el("place").value.replace(/^\s+|\s+$/g,"")||"Ustaritz");return false};
+loadWeather(el("place").value);
+setInterval(function(){loadWeather(el("place").value.replace(/^\s+|\s+$/g,"")||"Ustaritz")},900000);
+</script>
+</body>
+</html>
+EOF
